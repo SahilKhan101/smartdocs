@@ -35,7 +35,7 @@ jobs:
           cp -r ../backend .
           cp -r ../frontend .
           cp -r ../data .
-          cp ../README.md .
+          cp ../README_HF.md README.md  # Use HF-specific README
           cp ../.dockerignore .
           
           # Clean up unnecessary files
