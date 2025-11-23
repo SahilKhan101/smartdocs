@@ -16,6 +16,11 @@ function App() {
 
   useEffect(scrollToBottom, [messages])
 
+  // Environment-aware API URL
+  const API_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : '';  // Use relative URL in production (nginx proxy)
+
   const sendMessage = async () => {
     if (!input.trim()) return
 
@@ -25,19 +30,19 @@ function App() {
     setLoading(true)
 
     try {
-      const response = await fetch("http://localhost:8000/chat", {
+      const response = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: userMessage.text, model_type: model })
       })
 
       const data = await response.json()
-      
+
       if (response.ok) {
-        setMessages(prev => [...prev, { 
-          text: data.answer, 
-          sender: "bot", 
-          sources: data.sources 
+        setMessages(prev => [...prev, {
+          text: data.answer,
+          sender: "bot",
+          sources: data.sources
         }])
       } else {
         setMessages(prev => [...prev, { text: "Error: " + data.detail, sender: "bot" }])
@@ -80,10 +85,10 @@ function App() {
       </div>
 
       <div className="input-area">
-        <input 
-          type="text" 
-          value={input} 
-          onChange={(e) => setInput(e.target.value)} 
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
           placeholder="Ask a question about OmegaCore..."
           disabled={loading}
