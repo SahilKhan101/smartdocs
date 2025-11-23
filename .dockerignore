@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+*.log
+
+# Node
+node_modules/
+npm-debug.log*
+.npm
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Git
+.git/
+.github/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+frontend/dist/
+backend/chroma_db/
+
+# Documentation (except README)
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+backend/test_*.py
+backend/verify_*.py
+backend/list_models.py
+
+# Temporary
+*.tmp
+*.bak

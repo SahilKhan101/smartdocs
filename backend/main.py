@@ -19,7 +19,11 @@ app = FastAPI(title="SmartDocs RAG API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all origins for dev
+    allow_origins=[
+        "http://localhost:5173",      # Local development
+        "http://localhost:7860",      # HF local testing
+        "https://*.hf.space",         # All Hugging Face Spaces
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,4 +94,10 @@ async def chat(request: ChatRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from datetime import datetime
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "vector_db": "connected" if os.path.exists(DB_PATH) else "missing",
+        "environment": "production" if os.getenv("HF_SPACE") else "development"
+    }

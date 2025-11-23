@@ -1,0 +1,64 @@
+name: Deploy to Hugging Face
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions Bot"
+      
+      - name: Clone Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+        run: |
+          git clone https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/smartdocs hf-space
+      
+      - name: Copy files to HF Space
+        run: |
+          # Remove old files
+          cd hf-space
+          git rm -rf . || true
+          
+          # Copy new files
+          cp -r ../Dockerfile .
+          cp -r ../backend .
+          cp -r ../frontend .
+          cp -r ../data .
+          cp ../README.md .
+          cp ../.dockerignore .
+          
+          # Clean up unnecessary files
+          rm -rf backend/venv
+          rm -rf backend/chroma_db
+          rm -rf backend/__pycache__
+          rm -rf backend/test_*.py
+          rm -rf backend/verify_*.py
+          rm -rf backend/list_models.py
+          rm -rf frontend/node_modules
+          rm -rf frontend/dist
+      
+      - name: Commit and push to HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ secrets.HF_USERNAME }}
+        run: |
+          cd hf-space
+          git add .
+          git commit -m "🚀 Deploy from GitHub (commit: ${{ github.sha }})" || echo "No changes to commit"
+          git push https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/smartdocs main
+      
+      - name: Deployment complete
+        run: |
+          echo "✅ Deployed successfully!"
+          echo "🔗 View at: https://huggingface.co/spaces/${{ secrets.HF_USERNAME }}/smartdocs"
