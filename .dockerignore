@@ -1,10 +1,12 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 venv/
+**/venv/
 env/
 ENV/
 *.egg-info/
@@ -13,6 +15,7 @@ ENV/
 
 # Node
 node_modules/
+**/node_modules/
 npm-debug.log*
 .npm
 package-lock.json
