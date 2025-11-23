@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 # Build React frontend
 COPY frontend/package*.json ./frontend/
 WORKDIR /app/frontend
-RUN npm ci --only=production
+RUN npm ci
 COPY frontend .
 RUN npm run build
 
@@ -34,22 +34,22 @@ RUN echo 'server { \
     client_max_body_size 10M; \
     \
     location / { \
-        root /app/frontend/dist; \
-        try_files $uri $uri/ /index.html; \
+    root /app/frontend/dist; \
+    try_files $uri $uri/ /index.html; \
     } \
     \
     location /api/ { \
-        proxy_pass http://localhost:8000/; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-        proxy_read_timeout 300s; \
+    proxy_pass http://localhost:8000/; \
+    proxy_set_header Host $host; \
+    proxy_set_header X-Real-IP $remote_addr; \
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
+    proxy_read_timeout 300s; \
     } \
     \
     location /health { \
-        proxy_pass http://localhost:8000/health; \
+    proxy_pass http://localhost:8000/health; \
     } \
-}' > /etc/nginx/sites-available/default
+    }' > /etc/nginx/sites-available/default
 
 # Ingest documentation into ChromaDB
 WORKDIR /app/backend
@@ -60,8 +60,7 @@ EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:7860/health || exit 1
+    CMD curl -f http://localhost:7860/health || exit 1
 
 # Start nginx and FastAPI
-CMD service nginx start && \
-    uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info
+CMD ["sh", "-c", "service nginx start && uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info"]
