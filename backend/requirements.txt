@@ -3,6 +3,7 @@ uvicorn
 python-dotenv
 pydantic
 ollama
+slowapi
 # Stable LangChain 0.2 Stack
 langchain==0.2.14
 langchain-community==0.2.12

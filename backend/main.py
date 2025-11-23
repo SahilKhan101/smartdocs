@@ -1,6 +1,9 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatOllama
@@ -15,7 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load environment variables
 load_dotenv()
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="SmartDocs RAG API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,9 +74,10 @@ def format_docs(docs):
     return "\n\n".join([d.page_content for d in docs])
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+@limiter.limit("3/minute")  # Testing: 3 requests per minute
+async def chat(request: Request, chat_request: ChatRequest):
     try:
-        llm = get_llm(request.model_type)
+        llm = get_llm(chat_request.model_type)
         
         # RAG Chain
         chain = (
@@ -79,10 +87,10 @@ async def chat(request: ChatRequest):
             | StrOutputParser()
         )
         
-        response = chain.invoke(request.question)
+        response = chain.invoke(chat_request.question)
         
         # Get sources
-        source_docs = retriever.get_relevant_documents(request.question)
+        source_docs = retriever.get_relevant_documents(chat_request.question)
         sources = list(set([doc.metadata.get("source", "unknown") for doc in source_docs]))
         
         return {
