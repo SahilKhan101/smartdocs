@@ -15,6 +15,13 @@ from langchain_core.output_parsers import StrOutputParser
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# Configure logging
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 # Load environment variables
 load_dotenv()
 

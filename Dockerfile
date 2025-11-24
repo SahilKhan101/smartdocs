@@ -2,14 +2,18 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Ollama requirements
 RUN apt-get update && apt-get install -y \
     nodejs npm \
     nginx \
     python3-dev \
     build-essential \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # Build React frontend
 COPY frontend/package*.json ./frontend/
@@ -55,6 +59,13 @@ RUN echo 'server { \
 WORKDIR /app/backend
 RUN python ingest.py
 
+# Pre-download Ollama model (this will take time but only happens once during build)
+# We'll use a smaller model to fit in HF's limits
+RUN ollama serve & \
+    sleep 10 && \
+    ollama pull gemma:2b && \
+    pkill ollama
+
 # Expose Hugging Face port (must be 7860)
 EXPOSE 7860
 
@@ -62,5 +73,30 @@ EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Start nginx and FastAPI
-CMD ["sh", "-c", "service nginx start && uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info"]
+# Create startup script
+RUN echo '#!/bin/bash\n\
+    # Start Ollama in background\n\
+    ollama serve &\n\
+    OLLAMA_PID=$!\n\
+    \n\
+    # Wait for Ollama to be ready\n\
+    echo "Waiting for Ollama to start..."\n\
+    for i in {1..30}; do\n\
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then\n\
+    echo "Ollama is ready!"\n\
+    break\n\
+    fi\n\
+    echo "Waiting... ($i/30)"\n\
+    sleep 2\n\
+    done\n\
+    \n\
+    # Start nginx\n\
+    service nginx start\n\
+    \n\
+    # Start FastAPI\n\
+    cd /app/backend\n\
+    uvicorn main:app --host 0.0.0.0 --port 8000 --log-level info\n\
+    ' > /app/start.sh && chmod +x /app/start.sh
+
+# Start all services
+CMD ["/app/start.sh"]
