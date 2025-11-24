@@ -18,8 +18,30 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load environment variables
 load_dotenv()
 
+# Session-based rate limiting (works better with proxies/load balancers)
+def get_rate_limit_key(request: Request):
+    """
+    Generate a unique key for rate limiting based on IP + User-Agent.
+    This works better than IP-only on platforms with load balancers (like HF).
+    """
+    import hashlib
+    
+    # Get client IP (handle proxies)
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        ip = forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.client.host
+    
+    # Combine with user agent for better uniqueness
+    user_agent = request.headers.get("user-agent", "unknown")
+    session_key = f"{ip}:{user_agent}"
+    
+    # Hash it for privacy
+    return hashlib.md5(session_key.encode()).hexdigest()
+
 # Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_rate_limit_key)
 app = FastAPI(title="SmartDocs RAG API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
