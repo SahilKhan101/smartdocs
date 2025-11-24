@@ -25,20 +25,36 @@ def get_rate_limit_key(request: Request):
     This works better than IP-only on platforms with load balancers (like HF).
     """
     import hashlib
+    import logging
+    
+    logger = logging.getLogger("rate_limiter")
     
     # Get client IP (handle proxies)
     forwarded_for = request.headers.get("x-forwarded-for")
+    x_real_ip = request.headers.get("x-real-ip")
+    client_host = request.client.host
+    
+    # Debug logging
+    logger.info(f"Headers - X-Forwarded-For: {forwarded_for}, X-Real-IP: {x_real_ip}, Client: {client_host}")
+    
     if forwarded_for:
         ip = forwarded_for.split(",")[0].strip()
+    elif x_real_ip:
+        ip = x_real_ip
     else:
-        ip = request.client.host
+        ip = client_host
     
     # Combine with user agent for better uniqueness
     user_agent = request.headers.get("user-agent", "unknown")
     session_key = f"{ip}:{user_agent}"
     
     # Hash it for privacy
-    return hashlib.md5(session_key.encode()).hexdigest()
+    key_hash = hashlib.md5(session_key.encode()).hexdigest()
+    
+    # Debug logging
+    logger.info(f"Rate limit key: {key_hash[:16]}... (IP: {ip[:15]}..., UA: {user_agent[:30]}...)")
+    
+    return key_hash
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_rate_limit_key)
