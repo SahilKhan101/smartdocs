@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     ca-certificates \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Ollama
@@ -62,9 +63,10 @@ RUN python ingest.py
 # Pre-download Ollama model (this will take time but only happens once during build)
 # We'll use a smaller model to fit in HF's limits
 RUN ollama serve & \
+    OLLAMA_PID=$! && \
     sleep 10 && \
     ollama pull gemma:2b && \
-    pkill ollama
+    kill $OLLAMA_PID
 
 # Expose Hugging Face port (must be 7860)
 EXPOSE 7860
