@@ -30,7 +30,11 @@ function App() {
     setLoading(true)
 
     try {
-      const response = await fetch(`${API_URL}/api/chat`, {
+      const endpoint = window.location.hostname === 'localhost'
+        ? `${API_URL}/chat`  // Local: direct to backend
+        : '/api/chat';        // Production: through nginx proxy
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: userMessage.text, model_type: model })
@@ -45,10 +49,34 @@ function App() {
           sources: data.sources
         }])
       } else {
-        setMessages(prev => [...prev, { text: "Error: " + data.detail, sender: "bot" }])
+        // Handle different error types
+        let errorMessage = "Something went wrong. Please try again."
+
+        if (response.status === 429) {
+          // Rate limit exceeded
+          errorMessage = "⏳ Whoa, slow down! You've hit the rate limit. Please wait a minute before asking another question."
+        } else if (response.status === 500) {
+          // Server error
+          errorMessage = "🔧 Server error: " + (data.detail || data.error || "Internal server error")
+        } else if (response.status === 400) {
+          // Bad request
+          errorMessage = "❌ Invalid request: " + (data.detail || data.error || "Bad request")
+        } else if (data.detail) {
+          errorMessage = "Error: " + data.detail
+        } else if (data.error) {
+          errorMessage = "Error: " + data.error
+        }
+
+        setMessages(prev => [...prev, {
+          text: errorMessage,
+          sender: "bot"
+        }])
       }
     } catch (error) {
-      setMessages(prev => [...prev, { text: "Error: Could not connect to server.", sender: "bot" }])
+      setMessages(prev => [...prev, {
+        text: "❌ Could not connect to server. Please check your connection and try again.",
+        sender: "bot"
+      }])
     } finally {
       setLoading(false)
     }
