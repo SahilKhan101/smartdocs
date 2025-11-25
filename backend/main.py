@@ -118,13 +118,21 @@ def get_llm(model_type: str):
 def format_docs(docs):
     return "\n\n".join([d.page_content for d in docs])
 
+
 @app.post("/chat")
 @limiter.limit("3/minute")  # Testing: 3 requests per minute
 async def chat(request: Request, chat_request: ChatRequest):
+    from fastapi.responses import StreamingResponse
+    import json
+    
+    user_key = get_rate_limit_key(request)
+    logger = logging.getLogger("rate_limiter")
+    logger.info(f"Request from: {user_key[:16]}...")
+    
     try:
         llm = get_llm(chat_request.model_type)
         
-        # RAG Chain
+        # Create streaming chain
         chain = (
             {"context": retriever | format_docs, "question": RunnablePassthrough()}
             | prompt
@@ -132,18 +140,38 @@ async def chat(request: Request, chat_request: ChatRequest):
             | StrOutputParser()
         )
         
-        response = chain.invoke(chat_request.question)
+        # Stream generator function
+        async def generate():
+            try:
+                # First, get and send the sources
+                docs = retriever.get_relevant_documents(chat_request.question)
+                sources = list(set([doc.metadata.get("source", "unknown") for doc in docs]))
+                
+                # Send sources as first chunk
+                yield json.dumps({"type": "sources", "data": sources}) + "\n"
+                
+                # Stream the answer token by token
+                async for chunk in chain.astream(chat_request.question):
+                    yield json.dumps({"type": "token", "data": chunk}) + "\n"
+                
+                # Send completion signal
+                yield json.dumps({"type": "done"}) + "\n"
+                
+            except Exception as e:
+                logger.error(f"Streaming error: {str(e)}")
+                yield json.dumps({"type": "error", "data": str(e)}) + "\n"
         
-        # Get sources
-        source_docs = retriever.get_relevant_documents(chat_request.question)
-        sources = list(set([doc.metadata.get("source", "unknown") for doc in source_docs]))
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson"
+        )
         
-        return {
-            "answer": response,
-            "sources": sources
-        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/health")
 async def health():

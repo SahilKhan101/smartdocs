@@ -29,6 +29,10 @@ function App() {
     setInput("")
     setLoading(true)
 
+    // Add empty bot message that we'll update
+    const botMessageIndex = messages.length + 1
+    setMessages(prev => [...prev, { text: "", sender: "bot", sources: [], streaming: true }])
+
     try {
       const endpoint = window.location.hostname === 'localhost'
         ? `${API_URL}/chat`  // Local: direct to backend
@@ -40,26 +44,16 @@ function App() {
         body: JSON.stringify({ question: userMessage.text, model_type: model })
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        setMessages(prev => [...prev, {
-          text: data.answer,
-          sender: "bot",
-          sources: data.sources
-        }])
-      } else {
-        // Handle different error types
+      if (!response.ok) {
+        const data = await response.json()
+        // Handle errors
         let errorMessage = "Something went wrong. Please try again."
 
         if (response.status === 429) {
-          // Rate limit exceeded
           errorMessage = "⏳ Whoa, slow down! You've hit the rate limit. Please wait a minute before asking another question."
         } else if (response.status === 500) {
-          // Server error
           errorMessage = "🔧 Server error: " + (data.detail || data.error || "Internal server error")
         } else if (response.status === 400) {
-          // Bad request
           errorMessage = "❌ Invalid request: " + (data.detail || data.error || "Bad request")
         } else if (data.detail) {
           errorMessage = "Error: " + data.detail
@@ -67,16 +61,89 @@ function App() {
           errorMessage = "Error: " + data.error
         }
 
-        setMessages(prev => [...prev, {
-          text: errorMessage,
-          sender: "bot"
-        }])
+        setMessages(prev => {
+          const newMessages = [...prev]
+          newMessages[botMessageIndex] = { text: errorMessage, sender: "bot", streaming: false }
+          return newMessages
+        })
+        setLoading(false)
+        return
       }
+
+      // Handle streaming response
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let currentText = ""
+      let sources = []
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+
+          try {
+            const chunk = JSON.parse(line)
+
+            if (chunk.type === "sources") {
+              sources = chunk.data
+            } else if (chunk.type === "token") {
+              currentText += chunk.data
+              // Update message in real-time
+              setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[botMessageIndex] = {
+                  text: currentText,
+                  sender: "bot",
+                  sources: sources,
+                  streaming: true
+                }
+                return newMessages
+              })
+            } else if (chunk.type === "done") {
+              // Mark streaming as complete
+              setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[botMessageIndex] = {
+                  ...newMessages[botMessageIndex],
+                  streaming: false
+                }
+                return newMessages
+              })
+            } else if (chunk.type === "error") {
+              setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[botMessageIndex] = {
+                  text: "Error: " + chunk.data,
+                  sender: "bot",
+                  streaming: false
+                }
+                return newMessages
+              })
+            }
+          } catch (e) {
+            console.error("Error parsing chunk:", e, line)
+          }
+        }
+      }
+
     } catch (error) {
-      setMessages(prev => [...prev, {
-        text: "❌ Could not connect to server. Please check your connection and try again.",
-        sender: "bot"
-      }])
+      console.error("Fetch error:", error)
+      setMessages(prev => {
+        const newMessages = [...prev]
+        newMessages[botMessageIndex] = {
+          text: "❌ Could not connect to server. Please check your connection and try again.",
+          sender: "bot",
+          streaming: false
+        }
+        return newMessages
+      })
     } finally {
       setLoading(false)
     }
@@ -98,8 +165,8 @@ function App() {
       <div className="chat-window">
         {messages.map((msg, index) => (
           <div key={index} className={`message ${msg.sender}`}>
-            <div className="message-content">
-              {msg.text}
+            <div className={`message-content ${msg.streaming ? 'streaming' : ''}`}>
+              {msg.text || 'Thinking...'}
               {msg.sources && msg.sources.length > 0 && (
                 <div className="sources">
                   <small>Sources: {msg.sources.join(", ")}</small>
