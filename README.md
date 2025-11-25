@@ -81,6 +81,7 @@ User Question → React Frontend → FastAPI Backend → ChromaDB (Vector Search
 ## 📖 Documentation
 
 - **[Development Guide](DEVELOPMENT_GUIDE.md)**: Complete step-by-step tutorial
+- **[Features & Implementation](FEATURES.md)**: Deep dive into how features work
 - **[Walkthrough](walkthrough.md)**: Testing and verification guide
 - **[API Documentation](http://localhost:8000/docs)**: Auto-generated FastAPI docs (when server is running)
 
