@@ -20,6 +20,18 @@ function App() {
 
   useEffect(scrollToBottom, [messages])
 
+  // Example questions for suggestions
+  const suggestionQuestions = [
+    "What is OmegaCore and what are its main features?",
+    "How do I get started with OmegaCore?",
+    "What are the system requirements for OmegaCore?",
+    "How can I integrate OmegaCore into my project?"
+  ]
+
+  const handleSuggestionClick = (question) => {
+    setInput(question)
+  }
+
   // Environment-aware API URL
   const API_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:8000'
@@ -178,6 +190,25 @@ function App() {
       </header>
 
       <div className="chat-window">
+        {/* Show suggestions only when chat is empty (only initial greeting) */}
+        {messages.length === 1 && (
+          <div className="suggestions-container">
+            <p className="suggestions-title">Try asking:</p>
+            <div className="suggestions-grid">
+              {suggestionQuestions.map((question, index) => (
+                <div
+                  key={index}
+                  className="suggestion-card"
+                  onClick={() => handleSuggestionClick(question)}
+                >
+                  <span className="suggestion-icon">💡</span>
+                  <p>{question}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {messages.map((msg, index) => (
           <div key={index} className={`message ${msg.sender}`}>
             <div className={`message-content ${msg.streaming ? 'streaming' : ''}`}>
