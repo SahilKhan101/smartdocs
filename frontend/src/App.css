@@ -567,6 +567,8 @@ body::before {
   border-radius: 20px;
   box-shadow: var(--shadow-lg);
   animation: slideUp 0.5s ease-out 0.3s both;
+  align-items: flex-end;
+  /* Align button to bottom */
 }
 
 @keyframes slideUp {
@@ -581,7 +583,8 @@ body::before {
   }
 }
 
-input {
+/* Global Textarea Styling */
+textarea {
   flex: 1;
   padding: 16px 20px;
   border-radius: 14px;
@@ -592,16 +595,47 @@ input {
   font-family: inherit;
   transition: all 0.3s ease;
   outline: none;
+  resize: none;
+  min-height: 56px;
+  max-height: 200px;
+  line-height: 1.5;
 }
 
-input::placeholder {
+/* Custom scrollbar for textarea to match dark theme */
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background-color: var(--primary);
+  border-radius: 4px;
+  border: 2px solid var(--bg-secondary);
+}
+
+/* Firefox scrollbar */
+textarea {
+  scrollbar-color: var(--primary) var(--bg-secondary);
+  scrollbar-width: thin;
+}
+
+textarea::placeholder {
   color: var(--text-muted);
 }
 
-input:focus {
+textarea:focus {
   border-color: var(--primary);
   background: var(--bg-tertiary);
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+/* Remove old input styling if no longer used, or keep for compatibility */
+input {
+  display: none;
+  /* Hide input since we use textarea now */
 }
 
 button {
@@ -617,6 +651,11 @@ button {
   box-shadow: var(--shadow-md);
   position: relative;
   overflow: hidden;
+  height: 56px;
+  /* Match textarea height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 button::before {
@@ -656,24 +695,31 @@ button:disabled:hover {
 /* Responsive Design */
 @media (max-width: 768px) {
   .app-container {
-    padding: 12px;
+    padding: 16px;
+    height: 100vh;
+    /* Ensure full height */
   }
 
   .header {
     flex-direction: column;
-    gap: 16px;
-    padding: 20px;
+    gap: 12px;
+    padding: 16px;
     text-align: center;
+    margin-bottom: 16px;
+    /* Reduce margin */
   }
 
   .header h1 {
     font-size: 24px;
-    flex-direction: column;
+    flex-direction: row;
+    /* Keep icon and text on same line */
+    justify-content: center;
   }
 
   .subtitle {
     margin-left: 0;
     margin-top: 4px;
+    display: block;
   }
 
   .model-selector {
@@ -683,6 +729,36 @@ button:disabled:hover {
 
   .chat-window {
     padding: 16px;
+    margin-bottom: 16px;
+    /* Add space between chat and input */
+  }
+
+  /* Force 2 columns for suggestions on ALL mobile devices to save vertical space */
+  .suggestions-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .suggestion-card {
+    padding: 10px;
+    gap: 4px;
+    min-height: 80px;
+    /* Ensure consistent height */
+    justify-content: center;
+  }
+
+  .suggestion-icon {
+    font-size: 18px;
+  }
+
+  .suggestion-card p {
+    font-size: 11px;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .message {
@@ -690,24 +766,64 @@ button:disabled:hover {
   }
 
   .message-content {
-    padding: 14px 16px;
+    padding: 12px 14px;
     font-size: 14px;
   }
 
+  /* Keep input and button in a row to save space */
   .input-area {
-    padding: 16px;
-    flex-direction: column;
+    padding: 10px;
+    flex-direction: row;
+    gap: 8px;
+    margin-bottom: 16px;
+    /* Ensure space from bottom edge */
+    align-items: flex-end;
+    /* Align to bottom for multiline input */
   }
 
-  input {
-    padding: 14px 16px;
-    font-size: 16px;
+  /* Styling for the new textarea */
+  textarea {
+    padding: 10px 14px;
+    font-size: 15px;
     /* Prevents zoom on iOS */
+    min-height: 44px;
+    max-height: 120px;
+    resize: none;
+    border-radius: 14px;
+    border: 2px solid transparent;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+    flex: 1;
+    outline: none;
+  }
+
+  textarea:focus {
+    border-color: var(--primary);
+    background: var(--bg-tertiary);
   }
 
   button {
-    width: 100%;
-    padding: 14px;
+    padding: 0;
+    width: 44px;
+    /* Circle button on mobile */
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+  }
+
+  /* Hide text, show icon for mobile button */
+  button span {
+    display: none;
+  }
+
+  button::after {
+    content: '➤';
+    font-size: 18px;
+    margin-left: 2px;
   }
 }
 
