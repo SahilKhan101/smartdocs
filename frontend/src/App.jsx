@@ -29,13 +29,14 @@ function App() {
     if (!input.trim()) return
 
     const userMessage = { text: input, sender: "user" }
-    setMessages(prev => [...prev, userMessage])
+    let botMessageIndex; // Declare botMessageIndex here
+
+    setMessages(prev => {
+      botMessageIndex = prev.length + 1; // Calculate index for the bot's response
+      return [...prev, userMessage];
+    });
     setInput("")
     setLoading(true)
-
-    // Add empty bot message that we'll update
-    const botMessageIndex = messages.length + 1
-    setMessages(prev => [...prev, { text: "", sender: "bot", sources: [], streaming: true }])
 
     try {
       const endpoint = window.location.hostname === 'localhost'
@@ -102,11 +103,21 @@ function App() {
               // Update message in real-time
               setMessages(prev => {
                 const newMessages = [...prev]
-                newMessages[botMessageIndex] = {
-                  text: currentText,
-                  sender: "bot",
-                  sources: sources,
-                  streaming: true
+                // Create message if it doesn't exist yet
+                if (!newMessages[botMessageIndex]) {
+                  newMessages[botMessageIndex] = {
+                    text: currentText,
+                    sender: "bot",
+                    sources: sources,
+                    streaming: true
+                  }
+                } else {
+                  newMessages[botMessageIndex] = {
+                    text: currentText,
+                    sender: "bot",
+                    sources: sources,
+                    streaming: true
+                  }
                 }
                 return newMessages
               })
