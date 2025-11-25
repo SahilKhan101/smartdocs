@@ -85,8 +85,11 @@ app.add_middleware(
 DB_PATH = "./chroma_db"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Initialize Vector DB (Global)
-embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+# Initialize Vector DB (Global) - Force CPU to avoid CUDA errors
+embeddings = HuggingFaceEmbeddings(
+    model_name=EMBEDDING_MODEL,
+    model_kwargs={'device': 'cpu'}  # Force CPU usage
+)
 vector_db = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
 retriever = vector_db.as_retriever(search_kwargs={"k": 3})
 
