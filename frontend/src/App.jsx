@@ -55,10 +55,23 @@ function App() {
         ? `${API_URL}/chat`  // Local: direct to backend
         : '/api/chat';        // Production: through nginx proxy
 
+      // Prepare conversation history (exclude initial greeting and current message)
+      const conversationHistory = messages
+        .slice(1) // Skip initial greeting
+        .map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text
+        }))
+        .slice(-10); // Keep last 10 messages (5 exchanges) to match backend limit
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMessage.text, model_type: model })
+        body: JSON.stringify({
+          question: userMessage.text,
+          model_type: model,
+          history: conversationHistory
+        })
       })
 
       if (!response.ok) {

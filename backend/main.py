@@ -94,17 +94,37 @@ vector_db = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
 retriever = vector_db.as_retriever(search_kwargs={"k": 3})
 
 # Request Model
+class Message(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
 class ChatRequest(BaseModel):
     question: str
-    model_type: str = "gemini" # "gemini" or "local"
+    model_type: str = "gemini"  # "gemini" or "local"
+    history: list[Message] = []  # Optional conversation history
 
-# Prompt Template
+# Prompt Template with conversation history support
 template = """Answer the question based ONLY on the following context:
 {context}
 
-Question: {question}
+{history}Question: {question}
 """
 prompt = ChatPromptTemplate.from_template(template)
+
+def format_history(history: list[Message]) -> str:
+    """Format conversation history for the prompt."""
+    if not history:
+        return ""
+    
+    # Limit to last 5 exchanges (10 messages) to prevent token overflow
+    recent_history = history[-10:] if len(history) > 10 else history
+    
+    formatted = "Previous conversation:\n"
+    for msg in recent_history:
+        role = "User" if msg.role == "user" else "Assistant"
+        formatted += f"{role}: {msg.content}\n"
+    formatted += "\n"
+    return formatted
 
 def get_llm(model_type: str):
     if model_type == "gemini":
@@ -135,9 +155,12 @@ async def chat(request: Request, chat_request: ChatRequest):
     try:
         llm = get_llm(chat_request.model_type)
         
-        # Create streaming chain
+        # Format conversation history
+        history_text = format_history(chat_request.history)
+        
+        # Create streaming chain with history support
         chain = (
-            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            {"context": retriever | format_docs, "question": RunnablePassthrough(), "history": lambda _: history_text}
             | prompt
             | llm
             | StrOutputParser()
