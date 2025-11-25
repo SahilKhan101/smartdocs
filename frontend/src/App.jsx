@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github-dark.css'
 import './App.css'
 
 function App() {
@@ -166,7 +170,29 @@ function App() {
         {messages.map((msg, index) => (
           <div key={index} className={`message ${msg.sender}`}>
             <div className={`message-content ${msg.streaming ? 'streaming' : ''}`}>
-              {msg.text || 'Thinking...'}
+              {msg.sender === 'bot' ? (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={{
+                    code({ node, inline, className, children, ...props }) {
+                      return inline ? (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      )
+                    }
+                  }}
+                >
+                  {msg.text || 'Thinking...'}
+                </ReactMarkdown>
+              ) : (
+                msg.text
+              )}
               {msg.sources && msg.sources.length > 0 && (
                 <div className="sources">
                   <small>Sources: {msg.sources.join(", ")}</small>
