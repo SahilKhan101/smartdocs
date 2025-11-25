@@ -261,15 +261,26 @@ function App() {
       </div>
 
       <div className="input-area">
-        <input
-          type="text"
+        <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+          onChange={(e) => {
+            setInput(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.value ? `${Math.min(e.target.scrollHeight, 120)}px` : 'auto';
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage();
+            }
+          }}
           placeholder="Ask a question about OmegaCore..."
           disabled={loading}
+          rows={1}
         />
-        <button onClick={sendMessage} disabled={loading}>Send</button>
+        <button onClick={sendMessage} disabled={loading || !input.trim()}>
+          <span>Send</span>
+        </button>
       </div>
     </div>
   )
