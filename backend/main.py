@@ -85,23 +85,46 @@ app.add_middleware(
 DB_PATH = "./chroma_db"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Initialize Vector DB (Global)
-embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+# Initialize Vector DB (Global) - Force CPU to avoid CUDA errors
+embeddings = HuggingFaceEmbeddings(
+    model_name=EMBEDDING_MODEL,
+    model_kwargs={'device': 'cpu'}  # Force CPU usage
+)
 vector_db = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
 retriever = vector_db.as_retriever(search_kwargs={"k": 3})
 
 # Request Model
+class Message(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
 class ChatRequest(BaseModel):
     question: str
-    model_type: str = "gemini" # "gemini" or "local"
+    model_type: str = "gemini"  # "gemini" or "local"
+    history: list[Message] = []  # Optional conversation history
 
-# Prompt Template
+# Prompt Template with conversation history support
 template = """Answer the question based ONLY on the following context:
 {context}
 
-Question: {question}
+{history}Question: {question}
 """
 prompt = ChatPromptTemplate.from_template(template)
+
+def format_history(history: list[Message]) -> str:
+    """Format conversation history for the prompt."""
+    if not history:
+        return ""
+    
+    # Limit to last 5 exchanges (10 messages) to prevent token overflow
+    recent_history = history[-10:] if len(history) > 10 else history
+    
+    formatted = "Previous conversation:\n"
+    for msg in recent_history:
+        role = "User" if msg.role == "user" else "Assistant"
+        formatted += f"{role}: {msg.content}\n"
+    formatted += "\n"
+    return formatted
 
 def get_llm(model_type: str):
     if model_type == "gemini":
@@ -118,32 +141,63 @@ def get_llm(model_type: str):
 def format_docs(docs):
     return "\n\n".join([d.page_content for d in docs])
 
+
 @app.post("/chat")
 @limiter.limit("3/minute")  # Testing: 3 requests per minute
 async def chat(request: Request, chat_request: ChatRequest):
+    from fastapi.responses import StreamingResponse
+    import json
+    
+    user_key = get_rate_limit_key(request)
+    logger = logging.getLogger("rate_limiter")
+    logger.info(f"Request from: {user_key[:16]}...")
+    
     try:
         llm = get_llm(chat_request.model_type)
         
-        # RAG Chain
+        # Format conversation history
+        history_text = format_history(chat_request.history)
+        
+        # Create streaming chain with history support
         chain = (
-            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            {"context": retriever | format_docs, "question": RunnablePassthrough(), "history": lambda _: history_text}
             | prompt
             | llm
             | StrOutputParser()
         )
         
-        response = chain.invoke(chat_request.question)
+        # Stream generator function
+        async def generate():
+            try:
+                # First, get and send the sources
+                docs = retriever.get_relevant_documents(chat_request.question)
+                sources = list(set([doc.metadata.get("source", "unknown") for doc in docs]))
+                
+                # Send sources as first chunk
+                yield json.dumps({"type": "sources", "data": sources}) + "\n"
+                
+                # Stream the answer token by token
+                async for chunk in chain.astream(chat_request.question):
+                    yield json.dumps({"type": "token", "data": chunk}) + "\n"
+                
+                # Send completion signal
+                yield json.dumps({"type": "done"}) + "\n"
+                
+            except Exception as e:
+                logger.error(f"Streaming error: {str(e)}")
+                yield json.dumps({"type": "error", "data": str(e)}) + "\n"
         
-        # Get sources
-        source_docs = retriever.get_relevant_documents(chat_request.question)
-        sources = list(set([doc.metadata.get("source", "unknown") for doc in source_docs]))
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson"
+        )
         
-        return {
-            "answer": response,
-            "sources": sources
-        }
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/health")
 async def health():

@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github-dark.css'
 import './App.css'
 
 function App() {
@@ -16,6 +20,18 @@ function App() {
 
   useEffect(scrollToBottom, [messages])
 
+  // Example questions for suggestions
+  const suggestionQuestions = [
+    "What is OmegaCore and what are its main features?",
+    "How do I get started with OmegaCore?",
+    "What are the system requirements for OmegaCore?",
+    "How can I integrate OmegaCore into my project?"
+  ]
+
+  const handleSuggestionClick = (question) => {
+    setInput(question)
+  }
+
   // Environment-aware API URL
   const API_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:8000'
@@ -25,7 +41,12 @@ function App() {
     if (!input.trim()) return
 
     const userMessage = { text: input, sender: "user" }
-    setMessages(prev => [...prev, userMessage])
+    let botMessageIndex; // Declare botMessageIndex here
+
+    setMessages(prev => {
+      botMessageIndex = prev.length + 1; // Calculate index for the bot's response
+      return [...prev, userMessage];
+    });
     setInput("")
     setLoading(true)
 
@@ -34,32 +55,35 @@ function App() {
         ? `${API_URL}/chat`  // Local: direct to backend
         : '/api/chat';        // Production: through nginx proxy
 
+      // Prepare conversation history (exclude initial greeting and current message)
+      const conversationHistory = messages
+        .slice(1) // Skip initial greeting
+        .map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text
+        }))
+        .slice(-10); // Keep last 10 messages (5 exchanges) to match backend limit
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMessage.text, model_type: model })
+        body: JSON.stringify({
+          question: userMessage.text,
+          model_type: model,
+          history: conversationHistory
+        })
       })
 
-      const data = await response.json()
-
-      if (response.ok) {
-        setMessages(prev => [...prev, {
-          text: data.answer,
-          sender: "bot",
-          sources: data.sources
-        }])
-      } else {
-        // Handle different error types
+      if (!response.ok) {
+        const data = await response.json()
+        // Handle errors
         let errorMessage = "Something went wrong. Please try again."
 
         if (response.status === 429) {
-          // Rate limit exceeded
           errorMessage = "⏳ Whoa, slow down! You've hit the rate limit. Please wait a minute before asking another question."
         } else if (response.status === 500) {
-          // Server error
           errorMessage = "🔧 Server error: " + (data.detail || data.error || "Internal server error")
         } else if (response.status === 400) {
-          // Bad request
           errorMessage = "❌ Invalid request: " + (data.detail || data.error || "Bad request")
         } else if (data.detail) {
           errorMessage = "Error: " + data.detail
@@ -67,16 +91,99 @@ function App() {
           errorMessage = "Error: " + data.error
         }
 
-        setMessages(prev => [...prev, {
-          text: errorMessage,
-          sender: "bot"
-        }])
+        setMessages(prev => {
+          const newMessages = [...prev]
+          newMessages[botMessageIndex] = { text: errorMessage, sender: "bot", streaming: false }
+          return newMessages
+        })
+        setLoading(false)
+        return
       }
+
+      // Handle streaming response
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let currentText = ""
+      let sources = []
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+
+          try {
+            const chunk = JSON.parse(line)
+
+            if (chunk.type === "sources") {
+              sources = chunk.data
+            } else if (chunk.type === "token") {
+              currentText += chunk.data
+              // Update message in real-time
+              setMessages(prev => {
+                const newMessages = [...prev]
+                // Create message if it doesn't exist yet
+                if (!newMessages[botMessageIndex]) {
+                  newMessages[botMessageIndex] = {
+                    text: currentText,
+                    sender: "bot",
+                    sources: sources,
+                    streaming: true
+                  }
+                } else {
+                  newMessages[botMessageIndex] = {
+                    text: currentText,
+                    sender: "bot",
+                    sources: sources,
+                    streaming: true
+                  }
+                }
+                return newMessages
+              })
+            } else if (chunk.type === "done") {
+              // Mark streaming as complete
+              setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[botMessageIndex] = {
+                  ...newMessages[botMessageIndex],
+                  streaming: false
+                }
+                return newMessages
+              })
+            } else if (chunk.type === "error") {
+              setMessages(prev => {
+                const newMessages = [...prev]
+                newMessages[botMessageIndex] = {
+                  text: "Error: " + chunk.data,
+                  sender: "bot",
+                  streaming: false
+                }
+                return newMessages
+              })
+            }
+          } catch (e) {
+            console.error("Error parsing chunk:", e, line)
+          }
+        }
+      }
+
     } catch (error) {
-      setMessages(prev => [...prev, {
-        text: "❌ Could not connect to server. Please check your connection and try again.",
-        sender: "bot"
-      }])
+      console.error("Fetch error:", error)
+      setMessages(prev => {
+        const newMessages = [...prev]
+        newMessages[botMessageIndex] = {
+          text: "❌ Could not connect to server. Please check your connection and try again.",
+          sender: "bot",
+          streaming: false
+        }
+        return newMessages
+      })
     } finally {
       setLoading(false)
     }
@@ -96,10 +203,51 @@ function App() {
       </header>
 
       <div className="chat-window">
+        {/* Show suggestions only when chat is empty (only initial greeting) */}
+        {messages.length === 1 && (
+          <div className="suggestions-container">
+            <p className="suggestions-title">Try asking:</p>
+            <div className="suggestions-grid">
+              {suggestionQuestions.map((question, index) => (
+                <div
+                  key={index}
+                  className="suggestion-card"
+                  onClick={() => handleSuggestionClick(question)}
+                >
+                  <span className="suggestion-icon">💡</span>
+                  <p>{question}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {messages.map((msg, index) => (
           <div key={index} className={`message ${msg.sender}`}>
-            <div className="message-content">
-              {msg.text}
+            <div className={`message-content ${msg.streaming ? 'streaming' : ''}`}>
+              {msg.sender === 'bot' ? (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={{
+                    code({ node, inline, className, children, ...props }) {
+                      return inline ? (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      )
+                    }
+                  }}
+                >
+                  {msg.text || 'Thinking...'}
+                </ReactMarkdown>
+              ) : (
+                msg.text
+              )}
               {msg.sources && msg.sources.length > 0 && (
                 <div className="sources">
                   <small>Sources: {msg.sources.join(", ")}</small>
